@@ -15,7 +15,7 @@
 
 Name:		mod_auth_openidc
 Version:	1.8.8
-Release:	3%{?dist}
+Release:	5%{?dist}
 Summary:	OpenID Connect auth module for Apache HTTP Server
 
 Group:		System Environment/Daemons
@@ -24,6 +24,9 @@ URL:		https://github.com/pingidentity/mod_auth_openidc
 Source0:	https://github.com/pingidentity/mod_auth_openidc/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
 
 Patch0: decrypt_aesgcm.patch
+Patch1: 0001-don-t-echo-query-params-on-invalid-requests-to-redir.patch
+Patch2: 0002-Backport-security-fix-scrub-headers-on-OIDCUnAuthAct.patch
+Patch3: 0003-Backport-security-fix-scrub-headers-for-AuthType-oau.patch
 
 BuildRequires:	httpd-devel
 BuildRequires:	openssl-devel
@@ -42,6 +45,9 @@ an OpenID Connect Relying Party and/or OAuth 2.0 Resource Server.
 %prep
 %setup -q
 %patch0 -p1 -b decrypt_aesgcm
+%patch1 -p1 -b echo_req
+%patch2 -p1 -b scrub_headers
+%patch3 -p1 -b scrub_headers_oauth
 
 %build
 # workaround rpm-buildroot-usage
@@ -93,6 +99,15 @@ install -m 700 -d $RPM_BUILD_ROOT%{httpd_pkg_cache_dir}/cache
 %dir %attr(0700, apache, apache) %{httpd_pkg_cache_dir}/cache
 
 %changelog
+* Tue Jan 29 2019 Jakub Hrozek <jhrozek@redhat.com> - 1.8.8-5
+- Resolves: rhbz#1626297 - CVE-2017-6413 mod_auth_openidc: OIDC_CLAIM and
+                           OIDCAuthNHeader not skipped in an "AuthType oauth20"
+                           configuration [rhel-7]
+
+* Tue Jan 29 2019 Jakub Hrozek <jhrozek@redhat.com> - 1.8.8-4
+- Resolves: rhbz#1626299 - CVE-2017-6059 mod_auth_openidc: Shows
+                           user-supplied content on error pages [rhel-7]
+
 * Thu Mar 31 2016 John Dennis <jdennis@redhat.com> - 1.8.8-3
 - fix unit test failure caused by apr_jwe_decrypt_content_aesgcm()
   failing to null terminate decrypted string

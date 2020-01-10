@@ -1,0 +1,58 @@
+From 53bc62391d71418130edc0cb706f1aa5b0844c3a Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jakub.hrozek@posteo.se>
+Date: Fri, 23 Nov 2018 16:41:18 +0100
+Subject: [PATCH 1002/1002] Backport security fix: scrub headers for "AuthType
+ oauth20"
+
+---
+ src/mod_auth_openidc.c | 2 +-
+ src/mod_auth_openidc.h | 2 ++
+ src/oauth.c            | 6 ++++++
+ 3 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/src/mod_auth_openidc.c b/src/mod_auth_openidc.c
+index f00280f..b504ecb 100644
+--- a/src/mod_auth_openidc.c
++++ b/src/mod_auth_openidc.c
+@@ -133,7 +133,7 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
+ 	r->headers_in = clean_headers;
+ }
+ 
+-static void oidc_scrub_headers(request_rec *r) {
++void oidc_scrub_headers(request_rec *r) {
+ 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
+ 			&auth_openidc_module);
+ 
+diff --git a/src/mod_auth_openidc.h b/src/mod_auth_openidc.h
+index a92b81f..6f6bd92 100644
+--- a/src/mod_auth_openidc.h
++++ b/src/mod_auth_openidc.h
+@@ -373,6 +373,8 @@ void oidc_request_state_set(request_rec *r, const char *key, const char *value);
+ const char*oidc_request_state_get(request_rec *r, const char *key);
+ int oidc_handle_jwks(request_rec *r, oidc_cfg *c);
+ 
++void oidc_scrub_headers(request_rec *r);
++
+ // oidc_oauth
+ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
+ 
+diff --git a/src/oauth.c b/src/oauth.c
+index 218112b..279ee74 100644
+--- a/src/oauth.c
++++ b/src/oauth.c
+@@ -572,6 +572,12 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
+ 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+ 			&auth_openidc_module);
+ 
++	/*
++	* we're going to pass the information that we have to the application,
++	* but first we need to scrub the headers that we're going to use for security reasons
++	*/
++	oidc_scrub_headers(r);
++
+ 	/* set the user authentication HTTP header if set and required */
+ 	if ((r->user != NULL) && (dir_cfg->authn_header != NULL)) {
+ 		oidc_debug(r, "setting authn header (%s) to: %s", dir_cfg->authn_header,
+-- 
+2.19.2
+
