@@ -1,0 +1,72 @@
+commit 71dcbcda4692922360fe6222bd6556cce89d98e4
+Author: John Dennis <jdennis@redhat.com>
+Date:   Thu Mar 31 16:09:11 2016 -0400
+
+    apr_jwe_decrypt_content_aesgcm() null terminate string
+    
+    Also fixes unit test failure.
+    
+    The test test_jwt_decrypt_gcm() in test.c would sometimes fail. The
+    failure was caused by extra garbage appearing in the decrypted string
+    after the expected string. This is due to the failure of
+    apr_jwe_decrypt_content_aesgcm() to null terminate the string as is
+    similarity done in apr_jwe_decrypt_content_aescbc().
+    
+    This patch copies the logic from apr_jwe_decrypt_content_aescbc()
+    regarding the decryption output length (p_len) and the final output
+    length (f_len) which are then used to compute the end of the data in
+    the output buffer, the next octet after the decrypted data in the
+    output buffer is then assigned a null terminator.
+    
+    Signed-off-by: John Dennis <jdennis@redhat.com>
+
+diff --git a/src/jose/apr_jwe.c b/src/jose/apr_jwe.c
+index 6800033..d4b64cb 100644
+--- a/src/jose/apr_jwe.c
++++ b/src/jose/apr_jwe.c
+@@ -382,7 +382,7 @@ apr_byte_t apr_jwe_decrypt_content_aesgcm(apr_pool_t *pool,
+ 		apr_jwt_error_t *err) {
+ 
+ 	EVP_CIPHER_CTX *ctx;
+-	int outlen, rv;
++	int rv;
+ 
+ 	ctx = EVP_CIPHER_CTX_new();
+ 	if (!EVP_DecryptInit_ex(ctx, apr_jwe_enc_to_openssl_cipher(header->enc),
+@@ -391,8 +391,9 @@ apr_byte_t apr_jwe_decrypt_content_aesgcm(apr_pool_t *pool,
+ 		return FALSE;
+ 	}
+ 
++	int p_len = cipher_text->len, f_len = 0;
+ 	unsigned char *plaintext = apr_palloc(pool,
+-			cipher_text->len
++			p_len
+ 			+ EVP_CIPHER_block_size(
+ 					apr_jwe_enc_to_openssl_cipher(header->enc)));
+ 
+@@ -407,13 +408,13 @@ apr_byte_t apr_jwe_decrypt_content_aesgcm(apr_pool_t *pool,
+ 		return FALSE;
+ 	}
+ 	/* zero or more calls to specify any AAD */
+-	if (!EVP_DecryptUpdate(ctx, NULL, &outlen, (unsigned char *) aad,
++	if (!EVP_DecryptUpdate(ctx, NULL, &p_len, (unsigned char *) aad,
+ 			aad_len)) {
+ 		apr_jwt_error_openssl(err, "EVP_DecryptUpdate (aad)");
+ 		return FALSE;
+ 	}
+ 	/* decrypt plaintext */
+-	if (!EVP_DecryptUpdate(ctx, plaintext, &outlen,
++	if (!EVP_DecryptUpdate(ctx, plaintext, &p_len,
+ 			(unsigned char *) cipher_text->value, cipher_text->len)) {
+ 		apr_jwt_error_openssl(err, "EVP_DecryptUpdate (ciphertext)");
+ 		return FALSE;
+@@ -425,7 +426,8 @@ apr_byte_t apr_jwe_decrypt_content_aesgcm(apr_pool_t *pool,
+ 	}
+ 
+ 	/* finalise: note get no output for GCM */
+-	rv = EVP_DecryptFinal_ex(ctx, plaintext, &outlen);
++	rv = EVP_DecryptFinal_ex(ctx, plaintext, &f_len);
++	plaintext[p_len + f_len] = '\0';
+ 
+ 	EVP_CIPHER_CTX_free(ctx);
+ 
